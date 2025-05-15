@@ -42,22 +42,21 @@ A Telegram bot for managing "check later" links and content. The bot automatical
    ```
    BOT_API_TOKEN=your_telegram_bot_token_here
    BOT_USERNAME=your_bot_username_here
-   WEBHOOK_URL=https://your-domain.com/webhook.php
    DB_DRIVER=sqlite
    DB_SQLITE_PATH=/full/path/to/database/check_later_bot.sqlite
    ```
 
-5. For local testing, you can use a tool like ngrok to expose your local server:
+5. For local testing, start ngrok to expose your local server:
    ```
    ngrok http 8080
    ```
 
-6. Update the `WEBHOOK_URL` in your `.env` file with the ngrok URL.
-
-7. Set the webhook:
+6. Set the webhook (the script will automatically detect the ngrok URL):
    ```
    php set_webhook.php
    ```
+
+   The bot now automatically detects your ngrok URL - no need to manually configure the webhook URL!
 
 ## Database
 
@@ -169,9 +168,10 @@ Follow these steps to deploy the bot on a DigitalOcean droplet:
    Update the following variables:
    - `BOT_API_TOKEN`: Your Telegram bot token
    - `BOT_USERNAME`: Your bot's username
-   - `WEBHOOK_URL`: https://your-domain.com/webhook.php (or your droplet IP if you don't have a domain)
    - `DB_DRIVER`: sqlite
    - `DB_SQLITE_PATH`: /var/www/check_later_my_bot/database/check_later_bot.sqlite
+   
+   Note: You no longer need to set the WEBHOOK_URL manually. For production deployment, you'll need to modify the NgrokService or create a custom service to use your domain.
 
 7. **Set Up Database**
 
