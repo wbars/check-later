@@ -1,0 +1,22 @@
+{
+    "name": "check_later_my_bot",
+    "description": "Telegram bot for managing 'check later' links and content",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "guzzlehttp/guzzle": "^7.0",
+        "vlucas/phpdotenv": "^5.3",
+        "longman/telegram-bot": "^0.80"
+    },
+    "autoload": {
+        "psr-4": {
+            "CheckLaterBot\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Bot Developer"
+        }
+    ],
+    "minimum-stability": "stable"
+}
