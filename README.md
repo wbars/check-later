@@ -40,28 +40,84 @@ A Telegram bot for managing "check later" links and content. The bot automatical
 
 4. Edit the `.env` file with your Telegram Bot token and set the SQLite database path:
    ```
+   BOT_API_TOKEN=your_telegram_bot_token_here
+   BOT_USERNAME=your_bot_username_here
+   WEBHOOK_URL=https://your-domain.com/webhook.php
    DB_DRIVER=sqlite
-   DB_SQLITE_PATH=database/check_later_bot.sqlite
+   DB_SQLITE_PATH=/full/path/to/database/check_later_bot.sqlite
    ```
 
-5. Initialize the SQLite database and tables:
-   ```
-   php database/init_sqlite_db.php
-   ```
-
-6. For local testing, you can use a tool like ngrok to expose your local server:
+5. For local testing, you can use a tool like ngrok to expose your local server:
    ```
    ngrok http 8080
    ```
 
-7. Update the `WEBHOOK_URL` in your `.env` file with the ngrok URL.
+6. Update the `WEBHOOK_URL` in your `.env` file with the ngrok URL.
 
-8. Set the webhook:
+7. Set the webhook:
    ```
    php set_webhook.php
    ```
 
-### DigitalOcean Deployment
+## Database
+
+### SQLite Configuration
+
+The bot uses SQLite as the primary database storage for simplicity and ease of setup. Here's how to configure and use it:
+
+1. Ensure the SQLite PHP extension is installed:
+   ```
+   php -m | grep sqlite
+   ```
+   If it's not listed, install it:
+   ```
+   # On Ubuntu/Debian
+   sudo apt install php8.0-sqlite3
+   
+   # On macOS with Homebrew
+   brew install php
+   ```
+
+2. Set the SQLite configuration in your `.env` file:
+   ```
+   DB_DRIVER=sqlite
+   DB_SQLITE_PATH=/full/path/to/database/check_later_bot.sqlite
+   ```
+   Note: Use an absolute path to avoid any issues with relative paths.
+
+3. Initialize the SQLite database and create tables:
+   ```
+   php database/init_sqlite_db.php
+   ```
+   
+   Alternatively, you can manually create and initialize the database:
+   ```
+   touch database/check_later_bot.sqlite
+   sqlite3 database/check_later_bot.sqlite < database/migrations_sqlite.sql
+   ```
+
+4. The database schema is defined in [database/migrations_sqlite.sql](database/migrations_sqlite.sql) and includes:
+   - `entries` table: Stores all user-submitted content with categories
+   - `categories` table: Contains predefined content categories
+
+5. To view or modify the database directly:
+   ```
+   sqlite3 database/check_later_bot.sqlite
+   ```
+   
+   Some useful SQLite commands:
+   ```
+   .tables                  # List all tables
+   .schema entries          # Show schema for entries table
+   SELECT * FROM categories; # View all categories
+   .quit                    # Exit SQLite console
+   ```
+
+### Legacy MySQL Support (Optional)
+
+The bot also supports MySQL for legacy deployments, but SQLite is recommended for most use cases. If you need to use MySQL, refer to the commented section in `.env.example` for configuration details.
+
+## DigitalOcean Deployment
 
 Follow these steps to deploy the bot on a DigitalOcean droplet:
 
@@ -85,32 +141,10 @@ Follow these steps to deploy the bot on a DigitalOcean droplet:
 
    ```
    apt update && apt upgrade -y
-   apt install -y nginx mysql-server php8.0-fpm php8.0-mysql php8.0-curl php8.0-mbstring php8.0-xml php8.0-zip unzip git
+   apt install -y nginx php8.0-fpm php8.0-sqlite3 php8.0-curl php8.0-mbstring php8.0-xml php8.0-zip unzip git
    ```
 
-4. **Secure MySQL and Create Database**
-
-   ```
-   mysql_secure_installation
-   ```
-
-   Follow the prompts to set a root password and secure your MySQL installation.
-
-   Then create the database and user:
-
-   ```
-   mysql -u root -p
-   ```
-
-   ```sql
-   CREATE DATABASE check_later_bot CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-   CREATE USER 'botuser'@'localhost' IDENTIFIED BY 'your_secure_password';
-   GRANT ALL PRIVILEGES ON check_later_bot.* TO 'botuser'@'localhost';
-   FLUSH PRIVILEGES;
-   EXIT;
-   ```
-
-5. **Clone the Repository**
+4. **Clone the Repository**
 
    ```
    cd /var/www
@@ -118,14 +152,14 @@ Follow these steps to deploy the bot on a DigitalOcean droplet:
    cd check_later_my_bot
    ```
 
-6. **Install Composer and Dependencies**
+5. **Install Composer and Dependencies**
 
    ```
    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
    composer install --no-dev
    ```
 
-7. **Configure Environment**
+6. **Configure Environment**
 
    ```
    cp .env.example .env
@@ -136,18 +170,16 @@ Follow these steps to deploy the bot on a DigitalOcean droplet:
    - `BOT_API_TOKEN`: Your Telegram bot token
    - `BOT_USERNAME`: Your bot's username
    - `WEBHOOK_URL`: https://your-domain.com/webhook.php (or your droplet IP if you don't have a domain)
-   - `DB_HOST`: localhost
-   - `DB_NAME`: check_later_bot
-   - `DB_USER`: botuser
-   - `DB_PASS`: your_secure_password
+   - `DB_DRIVER`: sqlite
+   - `DB_SQLITE_PATH`: /var/www/check_later_my_bot/database/check_later_bot.sqlite
 
-8. **Set Up Database Tables**
+7. **Set Up Database**
 
    ```
-   mysql -u botuser -p check_later_bot < database/migrations.sql
+   php database/init_sqlite_db.php
    ```
 
-9. **Configure Nginx**
+8. **Configure Nginx**
 
    ```
    nano /etc/nginx/sites-available/check_later_bot
@@ -186,14 +218,15 @@ Follow these steps to deploy the bot on a DigitalOcean droplet:
    systemctl restart nginx
    ```
 
-10. **Set Permissions**
+9. **Set Permissions**
 
     ```
     chown -R www-data:www-data /var/www/check_later_my_bot
     chmod -R 755 /var/www/check_later_my_bot
+    chmod -R 777 /var/www/check_later_my_bot/database  # Ensure SQLite database is writable
     ```
 
-11. **Set Up SSL with Let's Encrypt** (recommended for production)
+10. **Set Up SSL with Let's Encrypt** (recommended for production)
 
     ```
     apt install -y certbot python3-certbot-nginx
@@ -202,14 +235,14 @@ Follow these steps to deploy the bot on a DigitalOcean droplet:
 
     Follow the prompts to complete the SSL setup.
 
-12. **Set the Webhook**
+11. **Set the Webhook**
 
     ```
     cd /var/www/check_later_my_bot
     php set_webhook.php
     ```
 
-13. **Configure Supervisor to Keep the Bot Running**
+12. **Configure Supervisor to Keep the Bot Running**
 
     ```
     apt install -y supervisor
