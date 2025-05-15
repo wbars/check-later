@@ -1,5 +1,5 @@
 {
-    "name": "check_later_my_bot",
+    "name": "user/check_later_my_bot",
     "description": "Telegram bot for managing 'check later' links and content",
     "type": "project",
     "require": {

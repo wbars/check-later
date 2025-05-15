@@ -85,29 +85,15 @@ Follow these steps to deploy the bot on a DigitalOcean droplet:
 
    ```
    apt update && apt upgrade -y
-   apt install -y nginx mysql-server php8.0-fpm php8.0-mysql php8.0-curl php8.0-mbstring php8.0-xml php8.0-zip unzip git
+   apt install -y nginx php8.0-fpm php8.0-sqlite3 php8.0-curl php8.0-mbstring php8.0-xml php8.0-zip unzip git
    ```
 
-4. **Secure MySQL and Create Database**
+4. **Create SQLite Database Directory**
 
    ```
-   mysql_secure_installation
-   ```
-
-   Follow the prompts to set a root password and secure your MySQL installation.
-
-   Then create the database and user:
-
-   ```
-   mysql -u root -p
-   ```
-
-   ```sql
-   CREATE DATABASE check_later_bot CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-   CREATE USER 'botuser'@'localhost' IDENTIFIED BY 'your_secure_password';
-   GRANT ALL PRIVILEGES ON check_later_bot.* TO 'botuser'@'localhost';
-   FLUSH PRIVILEGES;
-   EXIT;
+   mkdir -p /var/www/check_later_my_bot/database
+   chown -R www-data:www-data /var/www/check_later_my_bot/database
+   chmod 755 /var/www/check_later_my_bot/database
    ```
 
 5. **Clone the Repository**
@@ -136,15 +122,13 @@ Follow these steps to deploy the bot on a DigitalOcean droplet:
    - `BOT_API_TOKEN`: Your Telegram bot token
    - `BOT_USERNAME`: Your bot's username
    - `WEBHOOK_URL`: https://your-domain.com/webhook.php (or your droplet IP if you don't have a domain)
-   - `DB_HOST`: localhost
-   - `DB_NAME`: check_later_bot
-   - `DB_USER`: botuser
-   - `DB_PASS`: your_secure_password
+   - `DB_DRIVER`: sqlite
+   - `DB_SQLITE_PATH`: /var/www/check_later_my_bot/database/check_later_bot.sqlite
 
-8. **Set Up Database Tables**
+8. **Set Up SQLite Database**
 
    ```
-   mysql -u botuser -p check_later_bot < database/migrations.sql
+   php database/init_sqlite_db.php
    ```
 
 9. **Configure Nginx**

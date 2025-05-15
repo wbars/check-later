@@ -18,14 +18,38 @@ class Database
     {
         if (self::$instance === null) {
             try {
-                $dsn = 'mysql:host=' . $_ENV['DB_HOST'] . ';dbname=' . $_ENV['DB_NAME'] . ';charset=utf8mb4';
-                $options = [
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_EMULATE_PREPARES => false,
-                ];
+                $driver = $_ENV['DB_DRIVER'] ?? 'sqlite';
                 
-                self::$instance = new PDO($dsn, $_ENV['DB_USER'], $_ENV['DB_PASS'], $options);
+                if ($driver === 'sqlite') {
+                    // SQLite connection
+                    $sqlitePath = $_ENV['DB_SQLITE_PATH'];
+                    // Ensure directory exists
+                    $directory = dirname($sqlitePath);
+                    if (!is_dir($directory)) {
+                        mkdir($directory, 0755, true);
+                    }
+                    
+                    $dsn = "sqlite:{$sqlitePath}";
+                    $options = [
+                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    ];
+                    
+                    self::$instance = new PDO($dsn, null, null, $options);
+                    
+                    // Enable foreign keys for SQLite
+                    self::$instance->exec('PRAGMA foreign_keys = ON;');
+                } else {
+                    // MySQL connection (legacy support)
+                    $dsn = 'mysql:host=' . $_ENV['DB_HOST'] . ';dbname=' . $_ENV['DB_NAME'] . ';charset=utf8mb4';
+                    $options = [
+                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                        PDO::ATTR_EMULATE_PREPARES => false,
+                    ];
+                    
+                    self::$instance = new PDO($dsn, $_ENV['DB_USER'], $_ENV['DB_PASS'], $options);
+                }
             } catch (PDOException $e) {
                 // Log error and rethrow
                 error_log('Database connection error: ' . $e->getMessage());
@@ -76,7 +100,7 @@ class Database
     public static function markEntryObsolete(int $id): bool
     {
         $db = self::getInstance();
-        $stmt = $db->prepare('UPDATE entries SET obsolete = TRUE WHERE id = ?');
+        $stmt = $db->prepare('UPDATE entries SET obsolete = 1 WHERE id = ?');
         
         return $stmt->execute([$id]);
     }
@@ -91,13 +115,18 @@ class Database
     public static function getRandomEntriesByCategory(string $category, int $limit = 2): array
     {
         $db = self::getInstance();
-        $stmt = $db->prepare('
+        $driver = $_ENV['DB_DRIVER'] ?? 'sqlite';
+        
+        // Use appropriate random function based on database driver
+        $randomFunction = ($driver === 'sqlite') ? 'RANDOM()' : 'RAND()';
+        
+        $stmt = $db->prepare("
             SELECT id, content, category, date_added 
             FROM entries 
-            WHERE category = ? AND obsolete = FALSE
-            ORDER BY RAND() 
+            WHERE category = ? AND obsolete = 0
+            ORDER BY {$randomFunction} 
             LIMIT ?
-        ');
+        ");
         $stmt->execute([$category, $limit]);
         
         return $stmt->fetchAll();

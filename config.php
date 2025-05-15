@@ -8,7 +8,12 @@ $dotenv->load();
 
 // Required environment variables
 $dotenv->required(['BOT_API_TOKEN', 'BOT_USERNAME', 'WEBHOOK_URL']);
-$dotenv->required(['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS']);
+$dotenv->required(['DB_DRIVER', 'DB_SQLITE_PATH']);
+
+// Legacy MySQL variables are only required if using MySQL
+if ($_ENV['DB_DRIVER'] === 'mysql') {
+    $dotenv->required(['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS']);
+}
 
 // Set error reporting
 ini_set('display_errors', 0);
