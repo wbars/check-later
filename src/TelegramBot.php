@@ -21,12 +21,9 @@ class TelegramBot {
     
     private function initDatabase(): void {
         try {
-            $this->db = new PDO(
-                "mysql:host={$this->config['database']['host']};dbname={$this->config['database']['name']};charset=utf8mb4",
-                $this->config['database']['user'],
-                $this->config['database']['pass'],
-                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-            );
+            $this->db = new PDO("sqlite:{$this->config['database']['path']}");
+            $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $this->db->exec('PRAGMA foreign_keys = ON');
         } catch (PDOException $e) {
             $this->logError("Database connection failed: " . $e->getMessage());
             throw $e;

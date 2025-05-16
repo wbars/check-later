@@ -8,13 +8,13 @@ A Telegram bot for managing and categorizing "check later" links. The bot automa
 - Menu-based interface for viewing links
 - Random link suggestions from each category
 - Ability to mark links as obsolete
-- Persistent storage in MySQL database
+- Persistent storage in SQLite database
 - Error logging
 
 ## Requirements
 
 - PHP 8.1 or higher
-- MySQL 5.7 or higher
+- SQLite3 PHP extension
 - Nginx with PHP-FPM
 - Composer
 - SSL certificate (for webhook)
@@ -32,25 +32,29 @@ A Telegram bot for managing and categorizing "check later" links. The bot automa
    composer install
    ```
 
-3. Create the database and tables:
-   ```bash
-   mysql -u your_user -p < schema.sql
-   ```
-
-4. Configure the bot:
+3. Configure the bot:
    - Copy `config.php` and update the following settings:
      - Telegram Bot Token (get it from @BotFather)
-     - Database credentials
      - Webhook URL (must be HTTPS)
      - Log file path
+   - The SQLite database path is configured by default to `data/check_later.db`
 
-5. Configure Nginx:
+4. Configure Nginx:
    - Copy `nginx.conf` to your Nginx sites directory
    - Update the server_name and root path
    - Enable the site: `sudo ln -s /etc/nginx/sites-available/check-later /etc/nginx/sites-enabled/`
    - Test and reload Nginx: `sudo nginx -t && sudo systemctl reload nginx`
 
-6. Run the setup script:
+5. Run the database setup script:
+   ```bash
+   php setup_database.php
+   ```
+   This script will:
+   - Create the data directory
+   - Initialize the SQLite database
+   - Create the required tables and indexes
+
+6. Run the bot setup script:
    ```bash
    php setup.php
    ```
@@ -84,7 +88,7 @@ Errors are logged to the file specified in `config.php` (default: `logs/error.lo
 
 - The webhook endpoint is protected by Telegram's secret token
 - Sensitive files (config.php, composer.json, schema.sql) are protected by Nginx
-- Database credentials are stored in config.php
+- The SQLite database file is stored in the data directory
 - All user input is properly sanitized
 - HTTPS is required for the webhook
 
@@ -105,4 +109,9 @@ To update the bot:
 3. Check the logs for any errors:
    ```bash
    tail -f logs/error.log
+   ```
+
+4. Backup the database:
+   ```bash
+   cp data/check_later.db data/check_later.db.backup
    ``` 

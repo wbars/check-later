@@ -4,12 +4,9 @@ return [
     // Telegram Bot Token (get it from @BotFather)
     'telegram_bot_token' => 'your_bot_token_here',
     
-    // Database Configuration
+    // Database Configuration (SQLite)
     'database' => [
-        'host' => 'localhost',
-        'name' => 'check_later',
-        'user' => 'your_db_user',
-        'pass' => 'your_db_password'
+        'path' => __DIR__ . '/data/check_later.db'
     ],
     
     // Webhook URL (your domain where the bot will be hosted)
