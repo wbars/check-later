@@ -16,12 +16,9 @@ function validateConfig(array $config): array {
         $errors[] = "Telegram bot token is not configured";
     }
     
-    // Check database configuration
-    if (empty($config['database']['host']) || 
-        empty($config['database']['name']) || 
-        $config['database']['user'] === 'your_db_user' || 
-        $config['database']['pass'] === 'your_db_password') {
-        $errors[] = "Database configuration is incomplete";
+    // Check SQLite database configuration
+    if (empty($config['database']['path'])) {
+        $errors[] = "Database path is not configured";
     }
     
     // Check webhook URL
@@ -44,10 +41,15 @@ function validateConfig(array $config): array {
 
 function testDatabaseConnection(array $config): ?string {
     try {
-        $dsn = "mysql:host={$config['database']['host']};dbname={$config['database']['name']};charset=utf8mb4";
-        $pdo = new PDO($dsn, $config['database']['user'], $config['database']['pass'], [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
-        ]);
+        $dbDir = dirname($config['database']['path']);
+        if (!is_dir($dbDir)) {
+            if (!mkdir($dbDir, 0777, true)) {
+                return "Could not create database directory at {$dbDir}";
+            }
+        }
+        
+        $pdo = new PDO("sqlite:{$config['database']['path']}");
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         return null;
     } catch (PDOException $e) {
         return "Database connection failed: " . $e->getMessage();
