@@ -1,4 +1,0 @@
-/vendor/
-/.env
-/database/*.sqlite
-/logs/*.log

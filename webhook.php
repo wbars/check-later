@@ -1,37 +1,27 @@
 <?php
 
-/**
- * Webhook entry point for the Check Later Bot
- * This file handles incoming webhook requests from Telegram
- */
+require_once __DIR__ . '/vendor/autoload.php';
+
+use CheckLater\TelegramBot;
 
 // Load configuration
-require_once __DIR__ . '/config.php';
+$config = require __DIR__ . '/config.php';
 
-use CheckLaterBot\Bot;
-use CheckLaterBot\Logger;
-use CheckLaterBot\MessageHandler;
-use Longman\TelegramBot\Exception\TelegramException;
+// Get the raw POST data
+$update = json_decode(file_get_contents('php://input'), true);
+
+if (!$update) {
+    http_response_code(400);
+    exit('Invalid request');
+}
 
 try {
-    // Initialize the bot with logger
-    $logger = Logger::getInstance();
-    $bot = new Bot(BOT_API_TOKEN, BOT_USERNAME, $logger);
-    
-    // Handle the webhook request
-    $bot->handleWebhook();
-} catch (TelegramException $e) {
-    // Log telegram errors
-    $logger = Logger::getInstance();
-    $logger->error('Telegram Exception: ' . $e->getMessage(), [
-        'exception' => get_class($e),
-        'trace' => $e->getTraceAsString()
-    ]);
-} catch (Exception $e) {
-    // Log general errors
-    $logger = Logger::getInstance();
-    $logger->error('Error: ' . $e->getMessage(), [
-        'exception' => get_class($e),
-        'trace' => $e->getTraceAsString()
-    ]);
-}
+    $bot = new TelegramBot($config);
+    $bot->handleUpdate($update);
+    http_response_code(200);
+    echo 'OK';
+} catch (\Exception $e) {
+    error_log("Error in webhook: " . $e->getMessage(), 3, $config['log_file']);
+    http_response_code(500);
+    echo 'Internal Server Error';
+} 

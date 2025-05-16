@@ -1,38 +1,44 @@
 <?php
 
-// Load environment variables
-require_once __DIR__ . '/vendor/autoload.php';
-
-$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
-$dotenv->load();
-
-// Required environment variables
-$dotenv->required(['BOT_API_TOKEN', 'BOT_USERNAME', 'WEBHOOK_URL']);
-$dotenv->required(['DB_DRIVER', 'DB_SQLITE_PATH']);
-
-// Legacy MySQL variables are only required if using MySQL
-if ($_ENV['DB_DRIVER'] === 'mysql') {
-    $dotenv->required(['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS']);
-}
-
-// Set error reporting
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-error_reporting(E_ALL);
-
-// Set timezone
-date_default_timezone_set('UTC');
-
-// Define constants
-define('BOT_API_TOKEN', $_ENV['BOT_API_TOKEN']);
-define('BOT_USERNAME', $_ENV['BOT_USERNAME']);
-define('WEBHOOK_URL', $_ENV['WEBHOOK_URL']);
-
-// Initialize logger
-$logPath = $_ENV['LOG_PATH'] ?? __DIR__ . '/logs/check_later_bot.log';
-$logLevel = $_ENV['LOG_LEVEL'] ?? 'warning';
-$logger = \CheckLaterBot\Logger::getInstance($logPath, $logLevel);
-
-// Register error handlers
-$errorHandler = \CheckLaterBot\ErrorHandler::getInstance($logger);
-$errorHandler->register();
+return [
+    // Telegram Bot Token (get it from @BotFather)
+    'telegram_bot_token' => 'your_bot_token_here',
+    
+    // Database Configuration
+    'database' => [
+        'host' => 'localhost',
+        'name' => 'check_later',
+        'user' => 'your_db_user',
+        'pass' => 'your_db_password'
+    ],
+    
+    // Webhook URL (your domain where the bot will be hosted)
+    'webhook_url' => 'https://your-domain.com/webhook.php',
+    
+    // Log file path
+    'log_file' => __DIR__ . '/logs/error.log',
+    
+    // Categories for link classification
+    'categories' => [
+        'youtube' => [
+            'patterns' => ['youtube.com', 'youtu.be'],
+            'name' => 'YouTube Videos'
+        ],
+        'books' => [
+            'patterns' => ['goodreads.com', 'amazon.com/books', 'book'],
+            'name' => 'Books'
+        ],
+        'movies' => [
+            'patterns' => ['imdb.com', 'netflix.com', 'movie'],
+            'name' => 'Movies & TV Shows'
+        ],
+        'articles' => [
+            'patterns' => ['medium.com', 'blog', 'article'],
+            'name' => 'Articles & Blogs'
+        ],
+        'other' => [
+            'patterns' => [],
+            'name' => 'Other Links'
+        ]
+    ]
+]; 

@@ -1,165 +1,108 @@
-## Check Later Bot
+# Check Later Telegram Bot
 
-A Telegram bot that helps you manage content you want to check later. The bot automatically classifies and organizes links and text messages into categories (YouTube videos, books, movies, etc.), allowing you to retrieve random suggestions from your saved content when you have time to check them.
+A Telegram bot for managing and categorizing "check later" links. The bot automatically classifies links into categories (YouTube, books, movies, etc.) and provides a menu interface to view random links from each category.
 
-### Features
+## Features
 
-- Automatically categorizes content (YouTube videos, books, movies, other)
-- Allows users to remap categories if needed
-- Provides random suggestions from each category
-- Marks entries as obsolete to exclude them from future suggestions
-- Simple and intuitive interface
-- Comprehensive error logging and handling
+- Automatic link categorization
+- Menu-based interface for viewing links
+- Random link suggestions from each category
+- Ability to mark links as obsolete
+- Persistent storage in MySQL database
+- Error logging
 
-### Requirements
+## Requirements
 
-- PHP 8.0 or higher
-- SQLite (recommended) or MySQL database
-- Composer for dependency management
-- Telegram Bot API token
+- PHP 8.1 or higher
+- MySQL 5.7 or higher
+- Nginx with PHP-FPM
+- Composer
+- SSL certificate (for webhook)
 
-### Installation
+## Installation
 
 1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/check_later_my_bot.git
-   cd check_later_my_bot
+   ```bash
+   git clone git@your-server:check-later.git
+   cd check-later
    ```
 
 2. Install dependencies:
-   ```
+   ```bash
    composer install
    ```
 
-3. Create a `.env` file based on the example:
-   ```
-   cp .env.example .env
-   ```
-
-4. Edit the `.env` file with your bot token, username, database settings, and logging configuration:
-   ```
-   BOT_API_TOKEN=your_telegram_bot_token_here
-   BOT_USERNAME=your_bot_username_here
-   WEBHOOK_URL=https://your-domain.com/webhook.php
-   
-   # SQLite (recommended)
-   DB_DRIVER=sqlite
-   DB_SQLITE_PATH=/full/path/to/database/check_later_bot.sqlite
-   
-   # MySQL (legacy, not recommended)
-   # DB_DRIVER=mysql
-   # DB_HOST=localhost
-   # DB_NAME=check_later_bot
-   # DB_USER=your_database_user
-   # DB_PASS=your_database_password
-   
-   # Logging Configuration
-   LOG_PATH=/full/path/to/logs/check_later_bot.log
-   LOG_LEVEL=warning
+3. Create the database and tables:
+   ```bash
+   mysql -u your_user -p < schema.sql
    ```
 
-5. Create the database and logs directories and ensure they're writable:
-   ```
-   mkdir -p database logs
-   chmod 755 database logs
-   ```
+4. Configure the bot:
+   - Copy `config.php` and update the following settings:
+     - Telegram Bot Token (get it from @BotFather)
+     - Database credentials
+     - Webhook URL (must be HTTPS)
+     - Log file path
 
-6. Set the webhook:
-   ```
-   php set_webhook.php
-   ```
+5. Configure Nginx:
+   - Copy `nginx.conf` to your Nginx sites directory
+   - Update the server_name and root path
+   - Enable the site: `sudo ln -s /etc/nginx/sites-available/check-later /etc/nginx/sites-enabled/`
+   - Test and reload Nginx: `sudo nginx -t && sudo systemctl reload nginx`
 
-### Deployment
+6. Run the setup script:
+   ```bash
+   php setup.php
+   ```
+   This script will:
+   - Validate your configuration
+   - Test database connection
+   - Set up the webhook
+   - Create necessary directories
+   - Verify the webhook is working
 
-#### DigitalOcean Droplet (Recommended)
-
-1. Create a new Ubuntu droplet on DigitalOcean
-2. Install required packages:
-   ```
-   apt update
-   apt install -y php8.0-cli php8.0-fpm php8.0-sqlite3 php8.0-curl php8.0-mbstring nginx git unzip
-   ```
-
-3. Install Composer:
-   ```
-   curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-   ```
-
-4. Clone the repository to `/var/www/check_later_my_bot`
-5. Set up Nginx:
-   ```
-   server {
-       listen 80;
-       server_name your-domain.com;
-       root /var/www/check_later_my_bot;
-       
-       location / {
-           try_files $uri $uri/ /index.php?$query_string;
-       }
-       
-       location ~ \.php$ {
-           include snippets/fastcgi-php.conf;
-           fastcgi_pass unix:/var/run/php/php8.0-fpm.sock;
-       }
-       
-       location ~ /\.ht {
-           deny all;
-       }
-   }
+7. Create log directory and set permissions (if not done by setup script):
+   ```bash
+   mkdir -p logs
+   chmod 777 logs
    ```
 
-6. Set up SSL with Let's Encrypt:
+## Usage
+
+1. Start a chat with your bot on Telegram
+2. Send `/start` to get the welcome message
+3. Send any URL to save it
+4. Use `/menu` to view your saved links by category
+5. Click on category buttons to get random links
+6. Use "Mark as obsolete" buttons to mark links you've already checked
+
+## Error Logging
+
+Errors are logged to the file specified in `config.php` (default: `logs/error.log`). Make sure the log directory is writable by the web server user.
+
+## Security Notes
+
+- The webhook endpoint is protected by Telegram's secret token
+- Sensitive files (config.php, composer.json, schema.sql) are protected by Nginx
+- Database credentials are stored in config.php
+- All user input is properly sanitized
+- HTTPS is required for the webhook
+
+## Maintenance
+
+To update the bot:
+
+1. Pull the latest changes:
+   ```bash
+   git pull
    ```
-   apt install -y certbot python3-certbot-nginx
-   certbot --nginx -d your-domain.com
+
+2. Update dependencies:
+   ```bash
+   composer update
    ```
 
-7. Follow the installation steps above to complete the setup
-
-### Logging
-
-The bot uses a PSR-3 compliant logging system based on Monolog. All PHP errors, warnings, and exceptions are captured and logged to a rotating log file.
-
-Configure logging in your `.env` file:
-```
-LOG_PATH=/path/to/logs/check_later_bot.log
-LOG_LEVEL=warning  # Options: debug, info, notice, warning, error, critical, alert, emergency
-```
-
-For more details on logging, see [docs/logging.md](docs/logging.md).
-
-### Development
-
-#### Code Style
-
-The project follows PSR-12 coding standards. You can check your code with:
-
-```
-composer phpcs
-```
-
-And automatically fix some issues with:
-
-```
-composer phpcbf
-```
-
-#### Static Analysis
-
-The project uses PHPStan for static analysis:
-
-```
-composer phpstan
-```
-
-#### Testing
-
-Run the test suite with:
-
-```
-composer test
-```
-
-### License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+3. Check the logs for any errors:
+   ```bash
+   tail -f logs/error.log
+   ``` 
