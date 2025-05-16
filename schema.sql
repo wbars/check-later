@@ -1,6 +1,3 @@
-CREATE DATABASE IF NOT EXISTS check_later;
-USE check_later;
-
 -- Create links table
 CREATE TABLE IF NOT EXISTS links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
