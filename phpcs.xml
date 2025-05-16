@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<ruleset name="Check Later Bot Coding Standard">
+    <description>PSR-12 coding standard for Check Later Bot</description>
+
+    <!-- Display progress -->
+    <arg value="p"/>
+    <!-- Use colors in output -->
+    <arg name="colors"/>
+
+    <!-- Inherit rules from PSR-12 -->
+    <rule ref="PSR12"/>
+
+    <!-- Paths to check -->
+    <file>src</file>
+    <file>tests</file>
+    <file>config.php</file>
+    <file>index.php</file>
+    <file>webhook.php</file>
+    <file>set_webhook.php</file>
+
+    <!-- Exclude vendor directory -->
+    <exclude-pattern>vendor/*</exclude-pattern>
+    <exclude-pattern>coverage/*</exclude-pattern>
+    <exclude-pattern>temp/*</exclude-pattern>
+</ruleset>

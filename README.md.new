@@ -1,0 +1,169 @@
+# Check Later Bot
+
+A Telegram bot that helps you manage content you want to check later. Save links and text messages, and the bot will automatically categorize them (YouTube videos, books, movies, etc.) and provide random suggestions from each category.
+
+## Features
+
+- Save links and text messages for later viewing
+- Automatic content categorization (YouTube, books, movies, etc.)
+- Retrieve random suggestions from each category
+- Mark entries as obsolete to exclude them from future suggestions
+- Remap entries to different categories if needed
+
+## Requirements
+
+- PHP 8.0 or higher
+- Composer
+- SQLite (recommended) or MySQL
+- Telegram Bot API token
+
+## Installation
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/check_later_my_bot.git
+   cd check_later_my_bot
+   ```
+
+2. Install dependencies:
+   ```
+   composer install
+   ```
+
+3. Copy the example environment file and configure it:
+   ```
+   cp .env.example .env
+   ```
+
+4. Edit the `.env` file with your Telegram Bot API token, bot username, and webhook URL:
+   ```
+   BOT_API_TOKEN=your_telegram_bot_token_here
+   BOT_USERNAME=your_bot_username_here
+   WEBHOOK_URL=https://your-domain.com/webhook.php
+   ```
+
+5. Configure the database:
+   - For SQLite (recommended):
+     ```
+     DB_DRIVER=sqlite
+     DB_SQLITE_PATH=/full/path/to/database/check_later_bot.sqlite
+     ```
+   - For MySQL (legacy support):
+     ```
+     DB_DRIVER=mysql
+     DB_HOST=localhost
+     DB_NAME=check_later_bot
+     DB_USER=your_database_user
+     DB_PASS=your_database_password
+     ```
+
+6. Initialize the database:
+   - For SQLite:
+     ```
+     php database/init_sqlite_db.php
+     ```
+   - For MySQL, import the SQL schema:
+     ```
+     mysql -u your_database_user -p your_database_name < database/migrations.sql
+     ```
+
+7. Set up the webhook:
+   ```
+   php set_webhook.php
+   ```
+
+## Development
+
+### Running Tests
+
+Run the test suite:
+```
+composer test
+```
+
+Run code style checks:
+```
+composer phpcs
+```
+
+Run static analysis:
+```
+composer phpstan
+```
+
+Run all checks:
+```
+composer check
+```
+
+### Local Development with ngrok
+
+For local development, you can use ngrok to expose your local server to the internet:
+
+1. Install ngrok: https://ngrok.com/download
+2. Start your PHP server:
+   ```
+   php -S localhost:8080
+   ```
+3. Start ngrok:
+   ```
+   ngrok http 8080
+   ```
+4. Update your `.env` file with the ngrok URL:
+   ```
+   WEBHOOK_URL=https://your-ngrok-url.ngrok.io/webhook.php
+   ```
+5. Set up the webhook:
+   ```
+   php set_webhook.php
+   ```
+
+## Deployment
+
+### Deploying to DigitalOcean
+
+1. Create a new Droplet with Ubuntu
+2. Install required packages:
+   ```
+   apt update
+   apt install -y nginx php8.0-fpm php8.0-sqlite3 php8.0-mysql php8.0-mbstring php8.0-xml php8.0-curl composer
+   ```
+3. Clone the repository to `/var/www/check_later_my_bot`
+4. Set up Nginx:
+   ```
+   server {
+       listen 80;
+       server_name your-domain.com;
+       root /var/www/check_later_my_bot;
+
+       location / {
+           try_files $uri /index.php$is_args$args;
+       }
+
+       location ~ \.php$ {
+           include snippets/fastcgi-php.conf;
+           fastcgi_pass unix:/var/run/php/php8.0-fpm.sock;
+       }
+   }
+   ```
+5. Set up SSL with Let's Encrypt:
+   ```
+   apt install -y certbot python3-certbot-nginx
+   certbot --nginx -d your-domain.com
+   ```
+6. Follow the installation steps above to configure the bot
+
+## Bot Commands
+
+- `/start` - Start the bot and show the main menu
+- `/help` - Show help information
+- Any text or link - Save it for later
+- Category buttons - Get random suggestions from a category
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

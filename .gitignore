@@ -1,2 +1,4 @@
-# Ignore dependencies folder
-vendor/
+/vendor/
+/.env
+/database/*.sqlite
+/logs/*.log

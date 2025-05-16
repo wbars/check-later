@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS categories (
 );
 
 -- Insert default categories
-INSERT INTO categories (name, description) VALUES 
+INSERT OR IGNORE INTO categories (name, description) VALUES 
 ('youtube', 'YouTube videos'),
 ('book', 'Books and reading materials'),
 ('movie', 'Movies and TV shows'),

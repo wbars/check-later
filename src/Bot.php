@@ -8,26 +8,31 @@ use Longman\TelegramBot\Entities\InlineKeyboard;
 use Longman\TelegramBot\Entities\Keyboard;
 use Longman\TelegramBot\Exception\TelegramException;
 use PDOException;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 class Bot
 {
     private Telegram $telegram;
-    
+    private LoggerInterface $logger;
+
     /**
      * Initialize the bot
      *
      * @param string $apiToken Bot API token
      * @param string $botUsername Bot username
+     * @param LoggerInterface|null $logger Optional logger instance
      * @throws TelegramException
      */
-    public function __construct(string $apiToken, string $botUsername)
+    public function __construct(string $apiToken, string $botUsername, ?LoggerInterface $logger = null)
     {
         $this->telegram = new Telegram($apiToken, $botUsername);
-        
+        $this->logger = $logger ?? Logger::getInstance();
+
         // Set up database connection for the Telegram Bot library
         $this->telegram->enableExternalMySql(Database::getInstance());
     }
-    
+
     /**
      * Set webhook for the bot
      *
@@ -40,11 +45,14 @@ class Bot
             $result = $this->telegram->setWebhook($webhookUrl);
             return $result->isOk();
         } catch (TelegramException $e) {
-            error_log('Error setting webhook: ' . $e->getMessage());
+            $this->logger->error('Error setting webhook: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'webhook_url' => $webhookUrl
+            ]);
             return false;
         }
     }
-    
+
     /**
      * Handle incoming webhook request
      *
@@ -56,11 +64,14 @@ class Bot
             $this->telegram->handle();
             return true;
         } catch (TelegramException $e) {
-            error_log('Error handling webhook: ' . $e->getMessage());
+            $this->logger->error('Error handling webhook: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'trace' => $e->getTraceAsString()
+            ]);
             return false;
         }
     }
-    
+
     /**
      * Process an incoming message
      *
@@ -73,25 +84,33 @@ class Bot
         try {
             // Classify the message
             $category = Classifier::classify($messageText);
-            
+
             // Store in database
             $entryId = Database::addEntry($messageText, $category);
-            
+
             // Send confirmation with category
             $this->sendConfirmation($chatId, $messageText, $category, $entryId);
-            
+
             return true;
         } catch (PDOException $e) {
-            error_log('Database error: ' . $e->getMessage());
+            $this->logger->error('Database error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'chat_id' => $chatId,
+                'message' => substr($messageText, 0, 100) . (strlen($messageText) > 100 ? '...' : '')
+            ]);
             $this->sendErrorMessage($chatId, 'Database error occurred. Please try again later.');
             return false;
         } catch (\Exception $e) {
-            error_log('Error processing message: ' . $e->getMessage());
+            $this->logger->error('Error processing message: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'chat_id' => $chatId,
+                'message' => substr($messageText, 0, 100) . (strlen($messageText) > 100 ? '...' : '')
+            ]);
             $this->sendErrorMessage($chatId, 'An error occurred. Please try again.');
             return false;
         }
     }
-    
+
     /**
      * Send confirmation message with category remap options
      *
@@ -103,56 +122,71 @@ class Bot
      */
     private function sendConfirmation(int $chatId, string $content, string $category, int $entryId): bool
     {
-        // Create inline keyboard for category remapping
-        $inlineKeyboard = new InlineKeyboard([]);
-        
-        // Get all categories
-        $categories = Database::getCategories();
-        
-        // Add a button for each category
-        $buttons = [];
-        $row = [];
-        $count = 0;
-        
-        foreach ($categories as $cat) {
-            // Skip the current category
-            if ($cat['name'] === $category) {
-                continue;
+        try {
+            // Get all categories
+            $categories = Database::getCategories();
+
+            // Add a button for each category
+            $buttons = [];
+            $row = [];
+            $count = 0;
+
+            foreach ($categories as $cat) {
+                // Skip the current category
+                if ($cat['name'] === $category) {
+                    continue;
+                }
+
+                $row[] = ['text' => ucfirst($cat['name']), 'callback_data' => "remap_{$entryId}_{$cat['name']}"];
+                $count++;
+
+                // Two buttons per row
+                if ($count % 2 === 0) {
+                    $buttons[] = $row;
+                    $row = [];
+                }
             }
-            
-            $row[] = ['text' => ucfirst($cat['name']), 'callback_data' => "remap_{$entryId}_{$cat['name']}"];
-            $count++;
-            
-            // Two buttons per row
-            if ($count % 2 === 0) {
+
+            // Add any remaining buttons
+            if (!empty($row)) {
                 $buttons[] = $row;
-                $row = [];
             }
+
+            // Create inline keyboard with buttons
+            $inlineKeyboard = new InlineKeyboard($buttons);
+
+            // Truncate content if too long
+            $displayContent = (strlen($content) > 50) ? substr($content, 0, 47) . '...' : $content;
+
+            // Send message with inline keyboard
+            $result = Request::sendMessage([
+                'chat_id' => $chatId,
+                'text' => "✅ Saved to category: *" . ucfirst($category) . "*\n\n" .
+                         "Content: `" . $displayContent . "`\n\n" .
+                         "You can remap to a different category if needed:",
+                'parse_mode' => 'Markdown',
+                'reply_markup' => $inlineKeyboard,
+            ]);
+
+            if (!$result->isOk()) {
+                $this->logger->warning('Failed to send confirmation message', [
+                    'chat_id' => $chatId,
+                    'error_code' => $result->getErrorCode(),
+                    'error_description' => $result->getDescription()
+                ]);
+            }
+
+            return $result->isOk();
+        } catch (\Exception $e) {
+            $this->logger->error('Error sending confirmation: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'chat_id' => $chatId,
+                'entry_id' => $entryId
+            ]);
+            return false;
         }
-        
-        // Add any remaining buttons
-        if (!empty($row)) {
-            $buttons[] = $row;
-        }
-        
-        $inlineKeyboard->setInlineKeyboard($buttons);
-        
-        // Truncate content if too long
-        $displayContent = (strlen($content) > 50) ? substr($content, 0, 47) . '...' : $content;
-        
-        // Send message with inline keyboard
-        $result = Request::sendMessage([
-            'chat_id' => $chatId,
-            'text' => "✅ Saved to category: *" . ucfirst($category) . "*\n\n" .
-                     "Content: `" . $displayContent . "`\n\n" .
-                     "You can remap to a different category if needed:",
-            'parse_mode' => 'Markdown',
-            'reply_markup' => $inlineKeyboard,
-        ]);
-        
-        return $result->isOk();
     }
-    
+
     /**
      * Handle category remapping
      *
@@ -174,15 +208,20 @@ class Bot
                 ]);
                 return true;
             }
-            
+
             return false;
         } catch (PDOException $e) {
-            error_log('Database error during remapping: ' . $e->getMessage());
+            $this->logger->error('Database error during remapping: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'chat_id' => $chatId,
+                'entry_id' => $entryId,
+                'new_category' => $newCategory
+            ]);
             $this->sendErrorMessage($chatId, 'Database error occurred. Please try again later.');
             return false;
         }
     }
-    
+
     /**
      * Send the main menu with category buttons
      *
@@ -194,20 +233,20 @@ class Bot
         try {
             // Get all categories
             $categories = Database::getCategories();
-            
+
             // Create keyboard buttons
             $buttons = [];
             foreach ($categories as $category) {
                 $buttons[] = [ucfirst($category['name'])];
             }
-            
+
             $keyboard = new Keyboard(
                 $buttons,
                 true, // resize_keyboard
                 true, // one_time_keyboard
                 true  // selective
             );
-            
+
             // Send message with keyboard
             $result = Request::sendMessage([
                 'chat_id' => $chatId,
@@ -216,15 +255,18 @@ class Bot
                          "Select a category to get random suggestions:",
                 'reply_markup' => $keyboard,
             ]);
-            
+
             return $result->isOk();
         } catch (PDOException $e) {
-            error_log('Database error: ' . $e->getMessage());
+            $this->logger->error('Database error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'chat_id' => $chatId
+            ]);
             $this->sendErrorMessage($chatId, 'Database error occurred. Please try again later.');
             return false;
         }
     }
-    
+
     /**
      * Send random suggestions from a category
      *
@@ -237,7 +279,7 @@ class Bot
         try {
             // Get random entries
             $entries = Database::getRandomEntriesByCategory($category);
-            
+
             if (empty($entries)) {
                 Request::sendMessage([
                     'chat_id' => $chatId,
@@ -247,7 +289,7 @@ class Bot
                 ]);
                 return true;
             }
-            
+
             // Send each entry with an "Mark as obsolete" button
             foreach ($entries as $entry) {
                 $inlineKeyboard = new InlineKeyboard([
@@ -255,7 +297,7 @@ class Bot
                         ['text' => 'Mark as obsolete', 'callback_data' => "obsolete_{$entry['id']}"],
                     ],
                 ]);
-                
+
                 Request::sendMessage([
                     'chat_id' => $chatId,
                     'text' => "*Suggestion from " . ucfirst($category) . "*:\n\n" .
@@ -265,15 +307,19 @@ class Bot
                     'reply_markup' => $inlineKeyboard,
                 ]);
             }
-            
+
             return true;
         } catch (PDOException $e) {
-            error_log('Database error: ' . $e->getMessage());
+            $this->logger->error('Database error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'chat_id' => $chatId,
+                'category' => $category
+            ]);
             $this->sendErrorMessage($chatId, 'Database error occurred. Please try again later.');
             return false;
         }
     }
-    
+
     /**
      * Mark an entry as obsolete
      *
@@ -293,17 +339,21 @@ class Bot
                 ]);
                 return true;
             }
-            
+
             return false;
         } catch (PDOException $e) {
-            error_log('Database error: ' . $e->getMessage());
+            $this->logger->error('Database error marking obsolete: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'chat_id' => $chatId,
+                'entry_id' => $entryId
+            ]);
             $this->sendErrorMessage($chatId, 'Database error occurred. Please try again later.');
             return false;
         }
     }
-    
+
     /**
-     * Send an error message
+     * Send an error message to the user
      *
      * @param int $chatId The chat ID
      * @param string $message The error message
@@ -311,11 +361,19 @@ class Bot
      */
     private function sendErrorMessage(int $chatId, string $message): bool
     {
-        $result = Request::sendMessage([
-            'chat_id' => $chatId,
-            'text' => "❌ Error: {$message}",
-        ]);
-        
-        return $result->isOk();
+        try {
+            $result = Request::sendMessage([
+                'chat_id' => $chatId,
+                'text' => "❌ " . $message,
+            ]);
+
+            return $result->isOk();
+        } catch (\Exception $e) {
+            $this->logger->error('Error sending error message: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'chat_id' => $chatId
+            ]);
+            return false;
+        }
     }
 }

@@ -8,155 +8,227 @@ use PDOException;
 class Database
 {
     private static ?PDO $instance = null;
-    
+
     /**
-     * Get database connection instance (singleton pattern)
+     * Get database instance (singleton)
      *
-     * @return PDO
+     * @return PDO Database connection
+     * @throws PDOException If connection fails
      */
     public static function getInstance(): PDO
     {
         if (self::$instance === null) {
             try {
-                $driver = $_ENV['DB_DRIVER'] ?? 'sqlite';
-                
-                if ($driver === 'sqlite') {
+                if ($_ENV['DB_DRIVER'] === 'sqlite') {
                     // SQLite connection
-                    $sqlitePath = $_ENV['DB_SQLITE_PATH'];
-                    // Ensure directory exists
-                    $directory = dirname($sqlitePath);
-                    if (!is_dir($directory)) {
-                        mkdir($directory, 0755, true);
-                    }
-                    
-                    $dsn = "sqlite:{$sqlitePath}";
-                    $options = [
-                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    ];
-                    
-                    self::$instance = new PDO($dsn, null, null, $options);
-                    
-                    // Enable foreign keys for SQLite
-                    self::$instance->exec('PRAGMA foreign_keys = ON;');
+                    $dsn = 'sqlite:' . $_ENV['DB_SQLITE_PATH'];
+                    self::$instance = new PDO($dsn);
+                    self::$instance->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+                    // Create tables if they don't exist
+                    self::createTables();
                 } else {
                     // MySQL connection (legacy support)
                     $dsn = 'mysql:host=' . $_ENV['DB_HOST'] . ';dbname=' . $_ENV['DB_NAME'] . ';charset=utf8mb4';
-                    $options = [
-                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                        PDO::ATTR_EMULATE_PREPARES => false,
-                    ];
-                    
-                    self::$instance = new PDO($dsn, $_ENV['DB_USER'], $_ENV['DB_PASS'], $options);
+                    self::$instance = new PDO($dsn, $_ENV['DB_USER'], $_ENV['DB_PASS']);
+                    self::$instance->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                 }
             } catch (PDOException $e) {
-                // Log error and rethrow
-                error_log('Database connection error: ' . $e->getMessage());
+                $logger = Logger::getInstance();
+                $logger->error('Database connection error: ' . $e->getMessage(), [
+                    'exception' => get_class($e),
+                    'driver' => $_ENV['DB_DRIVER']
+                ]);
                 throw $e;
             }
         }
-        
+
         return self::$instance;
     }
-    
+
+    /**
+     * Create database tables if they don't exist
+     *
+     * @return void
+     * @throws PDOException If query fails
+     */
+    private static function createTables(): void
+    {
+        try {
+            $db = self::$instance;
+
+            // Create categories table
+            $db->exec('
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                )
+            ');
+
+            // Create entries table
+            $db->exec('
+                CREATE TABLE IF NOT EXISTS entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_obsolete INTEGER DEFAULT 0
+                )
+            ');
+
+            // Insert default categories if they don't exist
+            $categories = ['youtube', 'book', 'movie', 'other'];
+            $stmt = $db->prepare('INSERT OR IGNORE INTO categories (name) VALUES (?)');
+
+            foreach ($categories as $category) {
+                $stmt->execute([$category]);
+            }
+        } catch (PDOException $e) {
+            $logger = Logger::getInstance();
+            $logger->error('Error creating database tables: ' . $e->getMessage(), [
+                'exception' => get_class($e)
+            ]);
+            throw $e;
+        }
+    }
+
     /**
      * Add a new entry to the database
      *
-     * @param string $content The content of the entry
-     * @param string $category The category of the entry
-     * @return int The ID of the inserted entry
+     * @param string $content The content to save
+     * @param string $category The category
+     * @return int The ID of the new entry
+     * @throws PDOException If query fails
      */
     public static function addEntry(string $content, string $category): int
     {
-        $db = self::getInstance();
-        $stmt = $db->prepare('INSERT INTO entries (content, category) VALUES (?, ?)');
-        $stmt->execute([$content, $category]);
-        
-        return (int) $db->lastInsertId();
+        try {
+            $db = self::getInstance();
+
+            $stmt = $db->prepare('INSERT INTO entries (content, category) VALUES (?, ?)');
+            $stmt->execute([$content, $category]);
+
+            return (int)$db->lastInsertId();
+        } catch (PDOException $e) {
+            $logger = Logger::getInstance();
+            $logger->error('Error adding entry: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'category' => $category
+            ]);
+            throw $e;
+        }
     }
-    
+
     /**
      * Update the category of an entry
      *
-     * @param int $id The ID of the entry
-     * @param string $category The new category
+     * @param int $entryId The entry ID
+     * @param string $newCategory The new category
      * @return bool Success status
+     * @throws PDOException If query fails
      */
-    public static function updateEntryCategory(int $id, string $category): bool
+    public static function updateEntryCategory(int $entryId, string $newCategory): bool
     {
-        $db = self::getInstance();
-        $stmt = $db->prepare('UPDATE entries SET category = ? WHERE id = ?');
-        
-        return $stmt->execute([$category, $id]);
+        try {
+            $db = self::getInstance();
+
+            $stmt = $db->prepare('UPDATE entries SET category = ? WHERE id = ?');
+            $stmt->execute([$newCategory, $entryId]);
+
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            $logger = Logger::getInstance();
+            $logger->error('Error updating entry category: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'entry_id' => $entryId,
+                'new_category' => $newCategory
+            ]);
+            throw $e;
+        }
     }
-    
+
     /**
      * Mark an entry as obsolete
      *
-     * @param int $id The ID of the entry
+     * @param int $entryId The entry ID
      * @return bool Success status
+     * @throws PDOException If query fails
      */
-    public static function markEntryObsolete(int $id): bool
+    public static function markEntryObsolete(int $entryId): bool
     {
-        $db = self::getInstance();
-        $stmt = $db->prepare('UPDATE entries SET obsolete = 1 WHERE id = ?');
-        
-        return $stmt->execute([$id]);
+        try {
+            $db = self::getInstance();
+
+            $stmt = $db->prepare('UPDATE entries SET is_obsolete = 1 WHERE id = ?');
+            $stmt->execute([$entryId]);
+
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            $logger = Logger::getInstance();
+            $logger->error('Error marking entry as obsolete: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'entry_id' => $entryId
+            ]);
+            throw $e;
+        }
     }
-    
+
     /**
-     * Get random entries from a specific category
-     *
-     * @param string $category The category to fetch from
-     * @param int $limit The number of entries to fetch
-     * @return array The random entries
-     */
-    public static function getRandomEntriesByCategory(string $category, int $limit = 2): array
-    {
-        $db = self::getInstance();
-        $driver = $_ENV['DB_DRIVER'] ?? 'sqlite';
-        
-        // Use appropriate random function based on database driver
-        $randomFunction = ($driver === 'sqlite') ? 'RANDOM()' : 'RAND()';
-        
-        $stmt = $db->prepare("
-            SELECT id, content, category, date_added 
-            FROM entries 
-            WHERE category = ? AND obsolete = 0
-            ORDER BY {$randomFunction} 
-            LIMIT ?
-        ");
-        $stmt->execute([$category, $limit]);
-        
-        return $stmt->fetchAll();
-    }
-    
-    /**
-     * Get all available categories
+     * Get all categories
      *
      * @return array List of categories
-     */
-    public static function getCategories(): array
+     * @throws PDOException If query fails
+     */    public static function getCategories(): array
     {
-        $db = self::getInstance();
-        $stmt = $db->query('SELECT name, description FROM categories');
-        
-        return $stmt->fetchAll();
+        try {
+            $db = self::getInstance();
+            
+            $stmt = $db->query('SELECT * FROM categories ORDER BY name');
+            if ($stmt === false) {
+                $logger = Logger::getInstance();
+                $logger->error('Failed to execute categories query');
+                return [];
+            }
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            $logger = Logger::getInstance();
+            $logger->error('Error getting categories: ' . $e->getMessage(), [
+                'exception' => get_class($e)
+            ]);
+            throw $e;
+        }
     }
-    
+
     /**
-     * Check if a category exists
+     * Get random entries from a category
      *
-     * @param string $category The category name to check
-     * @return bool Whether the category exists
+     * @param string $category The category
+     * @param int $limit Maximum number of entries to return
+     * @return array List of entries
+     * @throws PDOException If query fails
      */
-    public static function categoryExists(string $category): bool
+    public static function getRandomEntriesByCategory(string $category, int $limit = 3): array
     {
-        $db = self::getInstance();
-        $stmt = $db->prepare('SELECT COUNT(*) FROM categories WHERE name = ?');
-        $stmt->execute([$category]);
-        
-        return (int) $stmt->fetchColumn() > 0;
+        try {
+            $db = self::getInstance();
+
+            $stmt = $db->prepare('
+                SELECT * FROM entries 
+                WHERE category = ? AND is_obsolete = 0
+                ORDER BY RANDOM() 
+                LIMIT ?
+            ');
+            $stmt->execute([$category, $limit]);
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            $logger = Logger::getInstance();
+            $logger->error('Error getting random entries: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'category' => $category,
+                'limit' => $limit
+            ]);
+            throw $e;
+        }
     }
 }

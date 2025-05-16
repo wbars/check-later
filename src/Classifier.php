@@ -5,124 +5,149 @@ namespace CheckLaterBot;
 class Classifier
 {
     /**
-     * Classify content into predefined categories
+     * Classify content into a category
      *
      * @param string $content The content to classify
-     * @return string The determined category
+     * @return string The category name
      */
     public static function classify(string $content): string
     {
-        $content = trim($content);
-        
-        // Check if it's a YouTube video
-        if (self::isYouTubeUrl($content)) {
-            return 'youtube';
+        try {
+            // Normalize content for classification
+            $normalizedContent = strtolower(trim($content));
+
+            // YouTube video detection
+            if (self::isYouTubeVideo($normalizedContent)) {
+                return 'youtube';
+            }
+
+            // Book detection
+            if (self::isBook($normalizedContent)) {
+                return 'book';
+            }
+
+            // Movie detection
+            if (self::isMovie($normalizedContent)) {
+                return 'movie';
+            }
+
+            // Default category
+            return 'other';
+        } catch (\Exception $e) {
+            $logger = Logger::getInstance();
+            $logger->warning('Error during content classification: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'content_preview' => substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '')
+            ]);
+
+            // Return default category on error
+            return 'other';
         }
-        
-        // Check if it's a book (ISBN, Goodreads, etc.)
-        if (self::isBookReference($content)) {
-            return 'book';
-        }
-        
-        // Check if it's a movie (IMDB, movie title patterns, etc.)
-        if (self::isMovieReference($content)) {
-            return 'movie';
-        }
-        
-        // Default category
-        return 'other';
     }
-    
+
     /**
-     * Check if the content is a YouTube URL
+     * Check if content is a YouTube video
      *
      * @param string $content The content to check
-     * @return bool Whether it's a YouTube URL
+     * @return bool True if content is a YouTube video
      */
-    private static function isYouTubeUrl(string $content): bool
+    private static function isYouTubeVideo(string $content): bool
     {
-        // Match common YouTube URL patterns
+        // YouTube URL patterns
         $patterns = [
             '/youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)/',
             '/youtu\.be\/([a-zA-Z0-9_-]+)/',
-            '/youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/',
-            '/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/'
+            '/youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/'
         ];
-        
+
         foreach ($patterns as $pattern) {
             if (preg_match($pattern, $content)) {
                 return true;
             }
         }
-        
-        return false;
-    }
-    
-    /**
-     * Check if the content is a book reference
-     *
-     * @param string $content The content to check
-     * @return bool Whether it's a book reference
-     */
-    private static function isBookReference(string $content): bool
-    {
-        // Check for ISBN patterns
-        if (preg_match('/ISBN[-]?1[03]?[:]?\s?[0-9]{3}[-]?[0-9]{1,5}[-]?[0-9]{1,7}[-]?[0-9]{1,7}[-]?[0-9X]/', $content)) {
-            return true;
-        }
-        
-        // Check for Goodreads URLs
-        if (preg_match('/goodreads\.com\/book\/show\//', $content)) {
-            return true;
-        }
-        
-        // Check for Amazon book URLs
-        if (preg_match('/amazon\.com\/.*\/dp\/[0-9A-Z]{10}/', $content) && 
-            (stripos($content, 'book') !== false || stripos($content, 'read') !== false)) {
-            return true;
-        }
-        
-        // Check for common book title patterns (e.g., "Title by Author")
-        if (preg_match('/\s+by\s+[A-Z][a-z]+(\s+[A-Z][a-z]+)*/', $content)) {
-            return true;
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Check if the content is a movie reference
-     *
-     * @param string $content The content to check
-     * @return bool Whether it's a movie reference
-     */
-    private static function isMovieReference(string $content): bool
-    {
-        // Check for IMDB URLs
-        if (preg_match('/imdb\.com\/title\/tt[0-9]{7,8}/', $content)) {
-            return true;
-        }
-        
-        // Check for Rotten Tomatoes URLs
-        if (preg_match('/rottentomatoes\.com\/m\//', $content)) {
-            return true;
-        }
-        
-        // Check for common movie title patterns (e.g., "Movie Title (YYYY)")
-        if (preg_match('/\([12][0-9]{3}\)/', $content)) {
-            return true;
-        }
-        
-        // Check for streaming service URLs with movie/tv indicators
-        $streamingServices = ['netflix.com/title', 'hulu.com/movie', 'amazon.com/gp/video', 
-                             'disneyplus.com', 'hbomax.com', 'primevideo.com'];
-        
-        foreach ($streamingServices as $service) {
-            if (stripos($content, $service) !== false) {
+
+        // Check for YouTube-related keywords
+        $youtubeKeywords = ['youtube video', 'youtube channel', 'youtube tutorial'];
+        foreach ($youtubeKeywords as $keyword) {
+            if (strpos($content, $keyword) !== false) {
                 return true;
             }
         }
-        
+
+        return false;
+    }
+
+    /**
+     * Check if content is a book
+     *
+     * @param string $content The content to check
+     * @return bool True if content is a book
+     */
+    private static function isBook(string $content): bool
+    {
+        // Book-related patterns
+        $bookPatterns = [
+            '/book titled/i',
+            '/book by/i',
+            '/author/i',
+            '/novel/i',
+            '/read the book/i',
+            '/isbn/i',
+            '/published by/i',
+            '/publication date/i'
+        ];
+
+        foreach ($bookPatterns as $pattern) {
+            if (preg_match($pattern, $content)) {
+                return true;
+            }
+        }
+
+        // Book-related keywords
+        $bookKeywords = ['book', 'reading', 'novel', 'author', 'chapter', 'paperback', 'ebook'];
+        foreach ($bookKeywords as $keyword) {
+            if (strpos($content, $keyword) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if content is a movie
+     *
+     * @param string $content The content to check
+     * @return bool True if content is a movie
+     */
+    private static function isMovie(string $content): bool
+    {
+        // Movie-related patterns
+        $moviePatterns = [
+            '/movie titled/i',
+            '/film by/i',
+            '/directed by/i',
+            '/starring/i',
+            '/watch the movie/i',
+            '/imdb/i',
+            '/released in/i',
+            '/release date/i'
+        ];
+
+        foreach ($moviePatterns as $pattern) {
+            if (preg_match($pattern, $content)) {
+                return true;
+            }
+        }
+
+        // Movie-related keywords
+        $movieKeywords = ['movie', 'film', 'cinema', 'director', 'actor', 'actress', 'trailer', 'watch'];
+        foreach ($movieKeywords as $keyword) {
+            if (strpos($content, $keyword) !== false) {
+                return true;
+            }
+        }
+
         return false;
     }
 }

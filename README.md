@@ -1,26 +1,24 @@
-# Check Later Bot
+## Check Later Bot
 
-A Telegram bot for managing "check later" links and content. The bot automatically classifies entries (YouTube videos, books, movies, etc.), allows category remapping, and provides random suggestions from each category.
+A Telegram bot that helps you manage content you want to check later. The bot automatically classifies and organizes links and text messages into categories (YouTube videos, books, movies, etc.), allowing you to retrieve random suggestions from your saved content when you have time to check them.
 
-## Features
+### Features
 
-- Receive and classify any message (text or link)
-- Automatically categorize entries (YouTube, book, movie, other)
-- Store entries in a structured database
-- Allow remapping entries to different categories
-- Provide random suggestions from each category
-- Mark entries as obsolete to exclude from future suggestions
+- Automatically categorizes content (YouTube videos, books, movies, other)
+- Allows users to remap categories if needed
+- Provides random suggestions from each category
+- Marks entries as obsolete to exclude them from future suggestions
+- Simple and intuitive interface
+- Comprehensive error logging and handling
 
-## Requirements
+### Requirements
 
 - PHP 8.0 or higher
-- SQLite (php-sqlite3 extension)
-- Composer
+- SQLite (recommended) or MySQL database
+- Composer for dependency management
 - Telegram Bot API token
 
-## Installation
-
-### Local Development
+### Installation
 
 1. Clone the repository:
    ```
@@ -33,258 +31,135 @@ A Telegram bot for managing "check later" links and content. The bot automatical
    composer install
    ```
 
-3. Create a `.env` file from the example:
+3. Create a `.env` file based on the example:
    ```
    cp .env.example .env
    ```
 
-4. Edit the `.env` file with your Telegram Bot token and set the SQLite database path:
+4. Edit the `.env` file with your bot token, username, database settings, and logging configuration:
    ```
    BOT_API_TOKEN=your_telegram_bot_token_here
    BOT_USERNAME=your_bot_username_here
    WEBHOOK_URL=https://your-domain.com/webhook.php
+   
+   # SQLite (recommended)
    DB_DRIVER=sqlite
    DB_SQLITE_PATH=/full/path/to/database/check_later_bot.sqlite
+   
+   # MySQL (legacy, not recommended)
+   # DB_DRIVER=mysql
+   # DB_HOST=localhost
+   # DB_NAME=check_later_bot
+   # DB_USER=your_database_user
+   # DB_PASS=your_database_password
+   
+   # Logging Configuration
+   LOG_PATH=/full/path/to/logs/check_later_bot.log
+   LOG_LEVEL=warning
    ```
 
-5. For local testing, you can use a tool like ngrok to expose your local server:
+5. Create the database and logs directories and ensure they're writable:
    ```
-   ngrok http 8080
+   mkdir -p database logs
+   chmod 755 database logs
    ```
 
-6. Update the `WEBHOOK_URL` in your `.env` file with the ngrok URL.
-
-7. Set the webhook:
+6. Set the webhook:
    ```
    php set_webhook.php
    ```
 
-## Database
+### Deployment
 
-### SQLite Configuration
+#### DigitalOcean Droplet (Recommended)
 
-The bot uses SQLite as the primary database storage for simplicity and ease of setup. Here's how to configure and use it:
-
-1. Ensure the SQLite PHP extension is installed:
+1. Create a new Ubuntu droplet on DigitalOcean
+2. Install required packages:
    ```
-   php -m | grep sqlite
-   ```
-   If it's not listed, install it:
-   ```
-   # On Ubuntu/Debian
-   sudo apt install php8.0-sqlite3
-   
-   # On macOS with Homebrew
-   brew install php
+   apt update
+   apt install -y php8.0-cli php8.0-fpm php8.0-sqlite3 php8.0-curl php8.0-mbstring nginx git unzip
    ```
 
-2. Set the SQLite configuration in your `.env` file:
-   ```
-   DB_DRIVER=sqlite
-   DB_SQLITE_PATH=/full/path/to/database/check_later_bot.sqlite
-   ```
-   Note: Use an absolute path to avoid any issues with relative paths.
-
-3. Initialize the SQLite database and create tables:
-   ```
-   php database/init_sqlite_db.php
-   ```
-   
-   Alternatively, you can manually create and initialize the database:
-   ```
-   touch database/check_later_bot.sqlite
-   sqlite3 database/check_later_bot.sqlite < database/migrations_sqlite.sql
-   ```
-
-4. The database schema is defined in [database/migrations_sqlite.sql](database/migrations_sqlite.sql) and includes:
-   - `entries` table: Stores all user-submitted content with categories
-   - `categories` table: Contains predefined content categories
-
-5. To view or modify the database directly:
-   ```
-   sqlite3 database/check_later_bot.sqlite
-   ```
-   
-   Some useful SQLite commands:
-   ```
-   .tables                  # List all tables
-   .schema entries          # Show schema for entries table
-   SELECT * FROM categories; # View all categories
-   .quit                    # Exit SQLite console
-   ```
-
-### Legacy MySQL Support (Optional)
-
-The bot also supports MySQL for legacy deployments, but SQLite is recommended for most use cases. If you need to use MySQL, refer to the commented section in `.env.example` for configuration details.
-
-## DigitalOcean Deployment
-
-Follow these steps to deploy the bot on a DigitalOcean droplet:
-
-1. **Create a DigitalOcean Droplet**
-
-   - Log in to your DigitalOcean account
-   - Click "Create" and select "Droplet"
-   - Choose an image: Ubuntu 20.04 (LTS) x64
-   - Select a plan: Basic ($5/mo is sufficient for this bot)
-   - Choose a datacenter region close to your users
-   - Add your SSH key or create a password
-   - Click "Create Droplet"
-
-2. **Connect to Your Droplet**
-
-   ```
-   ssh root@your_droplet_ip
-   ```
-
-3. **Update System and Install Required Software**
-
-   ```
-   apt update && apt upgrade -y
-   apt install -y nginx php8.0-fpm php8.0-sqlite3 php8.0-curl php8.0-mbstring php8.0-xml php8.0-zip unzip git
-   ```
-
-4. **Clone the Repository**
-
-   ```
-   cd /var/www
-   git clone https://github.com/yourusername/check_later_my_bot.git
-   cd check_later_my_bot
-   ```
-
-5. **Install Composer and Dependencies**
-
+3. Install Composer:
    ```
    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-   composer install --no-dev
    ```
 
-6. **Configure Environment**
-
-   ```
-   cp .env.example .env
-   nano .env
-   ```
-
-   Update the following variables:
-   - `BOT_API_TOKEN`: Your Telegram bot token
-   - `BOT_USERNAME`: Your bot's username
-   - `WEBHOOK_URL`: https://your-domain.com/webhook.php (or your droplet IP if you don't have a domain)
-   - `DB_DRIVER`: sqlite
-   - `DB_SQLITE_PATH`: /var/www/check_later_my_bot/database/check_later_bot.sqlite
-
-7. **Set Up Database**
-
-   ```
-   php database/init_sqlite_db.php
-   ```
-
-8. **Configure Nginx**
-
-   ```
-   nano /etc/nginx/sites-available/check_later_bot
-   ```
-
-   Add the following configuration:
-
+4. Clone the repository to `/var/www/check_later_my_bot`
+5. Set up Nginx:
    ```
    server {
        listen 80;
-       server_name your-domain.com; # Or your droplet IP if you don't have a domain
+       server_name your-domain.com;
        root /var/www/check_later_my_bot;
-
-       index index.php;
-
+       
        location / {
            try_files $uri $uri/ /index.php?$query_string;
        }
-
+       
        location ~ \.php$ {
            include snippets/fastcgi-php.conf;
            fastcgi_pass unix:/var/run/php/php8.0-fpm.sock;
        }
-
+       
        location ~ /\.ht {
            deny all;
        }
    }
    ```
 
-   Enable the site:
-
+6. Set up SSL with Let's Encrypt:
    ```
-   ln -s /etc/nginx/sites-available/check_later_bot /etc/nginx/sites-enabled/
-   nginx -t
-   systemctl restart nginx
+   apt install -y certbot python3-certbot-nginx
+   certbot --nginx -d your-domain.com
    ```
 
-9. **Set Permissions**
+7. Follow the installation steps above to complete the setup
 
-    ```
-    chown -R www-data:www-data /var/www/check_later_my_bot
-    chmod -R 755 /var/www/check_later_my_bot
-    chmod -R 777 /var/www/check_later_my_bot/database  # Ensure SQLite database is writable
-    ```
+### Logging
 
-10. **Set Up SSL with Let's Encrypt** (recommended for production)
+The bot uses a PSR-3 compliant logging system based on Monolog. All PHP errors, warnings, and exceptions are captured and logged to a rotating log file.
 
-    ```
-    apt install -y certbot python3-certbot-nginx
-    certbot --nginx -d your-domain.com
-    ```
+Configure logging in your `.env` file:
+```
+LOG_PATH=/path/to/logs/check_later_bot.log
+LOG_LEVEL=warning  # Options: debug, info, notice, warning, error, critical, alert, emergency
+```
 
-    Follow the prompts to complete the SSL setup.
+For more details on logging, see [docs/logging.md](docs/logging.md).
 
-11. **Set the Webhook**
+### Development
 
-    ```
-    cd /var/www/check_later_my_bot
-    php set_webhook.php
-    ```
+#### Code Style
 
-12. **Configure Supervisor to Keep the Bot Running**
+The project follows PSR-12 coding standards. You can check your code with:
 
-    ```
-    apt install -y supervisor
-    nano /etc/supervisor/conf.d/check_later_bot.conf
-    ```
+```
+composer phpcs
+```
 
-    Add the following configuration:
+And automatically fix some issues with:
 
-    ```
-    [program:check_later_bot]
-    command=php /var/www/check_later_my_bot/webhook.php
-    autostart=true
-    autorestart=true
-    stderr_logfile=/var/log/check_later_bot.err.log
-    stdout_logfile=/var/log/check_later_bot.out.log
-    user=www-data
-    ```
+```
+composer phpcbf
+```
 
-    Update supervisor:
+#### Static Analysis
 
-    ```
-    supervisorctl reread
-    supervisorctl update
-    supervisorctl start check_later_bot
-    ```
+The project uses PHPStan for static analysis:
 
-## Usage
+```
+composer phpstan
+```
 
-1. Start a conversation with your bot on Telegram.
-2. Send `/start` to see the main menu.
-3. Send any link or text to save it.
-4. The bot will automatically classify it and allow you to remap if needed.
-5. Use the main menu to get random suggestions from each category.
-6. Mark entries as obsolete when you're done with them.
+#### Testing
 
-## Error Handling
+Run the test suite with:
 
-The bot includes comprehensive error handling:
-- Database connection errors are logged and reported
-- Invalid inputs receive appropriate error messages
-- Webhook errors are logged for troubleshooting
+```
+composer test
+```
 
-## License
+### License
 
 This project is licensed under the MIT License - see the LICENSE file for details.

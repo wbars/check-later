@@ -8,168 +8,163 @@ use Longman\TelegramBot\Exception\TelegramException;
 class MessageHandler
 {
     private Bot $bot;
-    
+    private array $categories;
+
     /**
-     * Initialize the message handler
+     * MessageHandler constructor
      *
      * @param Bot $bot The bot instance
      */
     public function __construct(Bot $bot)
     {
         $this->bot = $bot;
+
+        try {
+            // Get available categories
+            $this->categories = Database::getCategories();
+        } catch (\PDOException $e) {
+            $logger = Logger::getInstance();
+            $logger->error('Error initializing MessageHandler: ' . $e->getMessage(), [
+                'exception' => get_class($e)
+            ]);
+            $this->categories = [];
+        }
     }
-    
+
     /**
-     * Process an update from Telegram
+     * Process an incoming update
      *
-     * @param Update $update The update object
+     * @param Update $update The update to process
      * @return bool Success status
-     */
-    public function processUpdate(Update $update): bool
+     */    public function processUpdate(Update $update): bool
     {
         try {
+            // Handle callback queries (button presses)
+            if ($update->getCallbackQuery()) {
+                return $this->processCallbackQuery($update);
+            }
+            
             // Handle text messages
             if ($update->getMessage() && $update->getMessage()->getText()) {
-                return $this->handleTextMessage($update);
+                return $this->processMessage($update);
             }
             
-            // Handle callback queries (inline keyboard buttons)
-            if ($update->getCallbackQuery()) {
-                return $this->handleCallbackQuery($update);
-            }
-            
+            $logger = Logger::getInstance();
+            $logger->info('Received update with no callback query or text message', [
+                'update_id' => $update->getUpdateId()
+            ]);
             return false;
         } catch (TelegramException $e) {
-            error_log('Error processing update: ' . $e->getMessage());
+            $logger = Logger::getInstance();
+            $logger->error('Error processing update: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'update_id' => $update->getUpdateId()
+            ]);
+            return false;
+        } catch (\Exception $e) {
+            $logger = Logger::getInstance();
+            $logger->error('Unexpected error processing update: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'update_id' => $update->getUpdateId()
+            ]);
             return false;
         }
     }
-    
+
     /**
-     * Handle text messages
+     * Process a text message
      *
-     * @param Update $update The update object
+     * @param Update $update The update containing the message
      * @return bool Success status
      */
-    private function handleTextMessage(Update $update): bool
+    private function processMessage(Update $update): bool
     {
         $message = $update->getMessage();
         $chatId = $message->getChat()->getId();
         $text = $message->getText();
-        
+
         // Handle commands
         if ($text[0] === '/') {
-            return $this->handleCommand($chatId, $text);
+            return $this->processCommand($chatId, $text);
         }
-        
-        // Handle category selection from main menu
-        $categories = array_map(function($category) {
-            return strtolower($category['name']);
-        }, Database::getCategories());
-        
-        $lowercaseText = strtolower($text);
-        if (in_array($lowercaseText, $categories)) {
-            return $this->bot->sendSuggestions($chatId, $lowercaseText);
+
+        // Check if the message is a category selection
+        foreach ($this->categories as $category) {
+            if (
+                strtolower($text) === strtolower($category['name']) ||
+                strtolower($text) === strtolower(ucfirst($category['name']))
+            ) {
+                return $this->bot->sendSuggestions($chatId, $category['name']);
+            }
         }
-        
-        // Handle regular messages (links, text)
+
+        // Otherwise, treat as content to save
         return $this->bot->processMessage($chatId, $text);
     }
-    
+
     /**
-     * Handle commands
+     * Process a command
      *
      * @param int $chatId The chat ID
      * @param string $command The command text
      * @return bool Success status
      */
-    private function handleCommand(int $chatId, string $command): bool
+    private function processCommand(int $chatId, string $command): bool
     {
         $command = strtolower(trim($command));
-        
+
         switch ($command) {
             case '/start':
+            case '/menu':
                 return $this->bot->sendMainMenu($chatId);
-                
-            case '/help':
-                return $this->sendHelpMessage($chatId);
-                
+
             default:
-                return $this->sendUnknownCommandMessage($chatId);
+                // Unknown command
+                return false;
         }
     }
-    
+
     /**
-     * Handle callback queries (inline keyboard buttons)
+     * Process a callback query (button press)
      *
-     * @param Update $update The update object
+     * @param Update $update The update containing the callback query
      * @return bool Success status
      */
-    private function handleCallbackQuery(Update $update): bool
+    private function processCallbackQuery(Update $update): bool
     {
         $callbackQuery = $update->getCallbackQuery();
         $chatId = $callbackQuery->getMessage()->getChat()->getId();
         $data = $callbackQuery->getData();
-        
-        // Handle category remapping
-        if (strpos($data, 'remap_') === 0) {
-            list(, $entryId, $newCategory) = explode('_', $data);
-            return $this->bot->remapCategory($chatId, (int) $entryId, $newCategory);
+
+        try {
+            // Handle category remapping
+            if (strpos($data, 'remap_') === 0) {
+                $parts = explode('_', $data);
+                if (count($parts) === 3) {
+                    $entryId = (int)$parts[1];
+                    $newCategory = $parts[2];
+                    return $this->bot->remapCategory($chatId, $entryId, $newCategory);
+                }
+            }
+
+            // Handle marking as obsolete
+            if (strpos($data, 'obsolete_') === 0) {
+                $parts = explode('_', $data);
+                if (count($parts) === 2) {
+                    $entryId = (int)$parts[1];
+                    return $this->bot->markObsolete($chatId, $entryId);
+                }
+            }
+
+            return false;
+        } catch (\Exception $e) {
+            $logger = Logger::getInstance();
+            $logger->error('Error processing callback query: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'chat_id' => $chatId,
+                'callback_data' => $data
+            ]);
+            return false;
         }
-        
-        // Handle marking as obsolete
-        if (strpos($data, 'obsolete_') === 0) {
-            list(, $entryId) = explode('_', $data);
-            return $this->bot->markObsolete($chatId, (int) $entryId);
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Send help message
-     *
-     * @param int $chatId The chat ID
-     * @return bool Success status
-     */
-    private function sendHelpMessage(int $chatId): bool
-    {
-        $message = "🤖 *Check Later Bot Help*\n\n" .
-                  "This bot helps you save content to check later.\n\n" .
-                  "*Commands:*\n" .
-                  "/start - Show main menu\n" .
-                  "/help - Show this help message\n\n" .
-                  "*How to use:*\n" .
-                  "1. Send any link or text to save it\n" .
-                  "2. The bot will automatically classify it\n" .
-                  "3. You can remap to a different category if needed\n" .
-                  "4. Use the main menu to get random suggestions\n" .
-                  "5. Mark entries as obsolete when you're done with them";
-        
-        $result = \Longman\TelegramBot\Request::sendMessage([
-            'chat_id' => $chatId,
-            'text' => $message,
-            'parse_mode' => 'Markdown',
-        ]);
-        
-        return $result->isOk();
-    }
-    
-    /**
-     * Send unknown command message
-     *
-     * @param int $chatId The chat ID
-     * @return bool Success status
-     */
-    private function sendUnknownCommandMessage(int $chatId): bool
-    {
-        $message = "Unknown command. Use /help to see available commands.";
-        
-        $result = \Longman\TelegramBot\Request::sendMessage([
-            'chat_id' => $chatId,
-            'text' => $message,
-        ]);
-        
-        return $result->isOk();
     }
 }
